@@ -1,4 +1,4 @@
-# Moon Bag - Complete Product Requirements Document (MVP Version)
+# Moon Bag - Complete Product Requirements Document
 
 ## Table of Contents
 1. [Product Overview](#product-overview)
@@ -16,8 +16,6 @@
 
 ### Vision
 Moon Bag is a browser-based push-your-luck bag-building rogue-like game featuring cosmic-themed orb drawing mechanics, milestone progression, and strategic resource management. Players navigate through increasingly challenging levels while building their orb collection and managing multiple currencies.
-
-**MVP Scope**: This version focuses on core consumable orbs only (points, health, multipliers, currencies) without complex interaction mechanics or "put back" features.
 
 ### Target Platform
 - Web browsers (desktop and mobile)
@@ -48,8 +46,6 @@ Moon Bag is a browser-based push-your-luck bag-building rogue-like game featurin
   - 1x Remaining Orbs orb (points = orbs left in bag)
   - 1x Bomb Counter orb (points = bombs previously pulled)
   - 1x Health orb (+1 health)
-
-**Note**: MVP excludes complex interaction orbs (no "put back", "pull multiple", or conditional orbs)
 
 ### Orb Drawing System
 1. **Tap Moon Bag**: Draws random orb from player's bag
@@ -111,51 +107,50 @@ Each level follows this sequence:
 
 ---
 
-## Shop System (Post-MVP Feature)
+## Shop System
 
-**Note**: The shop system is excluded from the MVP. Players will complete levels using only their starting bag of 12 orbs. Shop functionality with the orb purchasing mechanics will be added in a future iteration.
+### Shop Mechanics
+- **Access**: Available after completing each level
+- **Inventory**: 6 randomly selected orbs per level
+  - 3x Common orbs
+  - 2x Rare orbs  
+  - 1x Cosmic orb
+- **Currency**: Spent using Cheddah earned from level completion
+- **Price Scaling**: Each additional purchase of same orb type costs 20% more (rounded up)
+- **Persistence**: Purchase history tracked across all levels. Reset at the beginning of each run.
 
-### MVP Consumable Orbs Only
-The MVP includes these consumable orb types:
+### Available Shop Orbs
 
-#### Points Orbs
-| Orb | Effect |
-|-----|--------|
-| Five Points | +5 points |
-| Seven Points | +7 points |
-| Eight Points | +8 points |
-| Nine Points | +9 points |
+#### Common Orbs (3 random selected)
+| Orb | Cost | Effect |
+|-----|------|--------|
+| Five Points | 5 | +5 points |
+| Cheddah Bomb | 5 | Bomb that gives +10 Cheddah |
+| Bomb Counter | 6 | +2 points per bomb orb pulled |
+| Seven Points | 8 | +7 points |
+| Moon Rock | 8 | +2 Moon Rocks |
+| Half Multiplier | 9 | x0.5 multiplier |
+| Health | 9 | +1 health |
 
-#### Damage/Health Orbs
-| Orb | Effect |
-|-----|--------|
-| Single Bomb | -1 health |
-| Double Bomb | -2 health |
-| Triple Bomb | -3 health |
-| Health | +1 health |
-| Big Health | +3 health |
-| Cheddah Bomb | -1 health, +10 Cheddah |
+#### Rare Orbs (2 random selected)
+| Orb | Cost | Effect |
+|-----|------|--------|
+| Eight Points | 11 | +8 points |
+| Nine Points | 13 | +9 points |
+| Next Points 2x | 14 | x2 multiplier for next points orb only |
+| Multiplier 1.5x | 16 | x1.5 multiplier |
 
-#### Multiplier Orbs
-| Orb | Effect |
-|-----|--------|
-| Double Multiplier | x2 multiplier |
-| Multiplier 1.5x | x1.5 multiplier |
-| Half Multiplier | x0.5 multiplier |
+#### Cosmic Orbs (1 random selected)
+| Orb | Cost | Effect |
+|-----|------|--------|
+| Big Health | 21 | +3 health |
+| Big Moon Rock | 23 | +10 Moon Rocks |
 
-#### Special Scoring Orbs
-| Orb | Effect |
-|-----|--------|
-| Remaining Orbs | Points = orbs left in bag |
-| Bomb Counter | Points = bombs previously pulled |
-
-#### Currency Orbs
-| Orb | Effect |
-|-----|--------|
-| Moon Rock | +2 Moon Rocks |
-| Big Moon Rock | +10 Moon Rocks |
-
-**Excluded from MVP**: Complex interaction orbs like "Next Points 2x", "pull back" mechanics, or conditional orbs
+### Purchase Tracking System
+- **Lifetime Tracking**: `purchasedOrbs` field tracks all purchases by orb type
+- **Cross-Level Persistence**: Purchase counts maintained between levels and runs
+- **Price Calculation**: `basePrice × 1.2^purchaseCount` (rounded up)
+- **Example**: First Five Points orb costs 5, second costs 6, third costs 8
 
 ---
 
