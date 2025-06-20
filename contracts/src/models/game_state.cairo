@@ -3,7 +3,7 @@ use starknet::ContractAddress;
 // ================================
 // GameStatus Enum - Game state tracking
 // ================================
-#[derive(Serde, Drop, Introspect, PartialEq, Debug)]
+#[derive(Copy, Drop, Serde, Introspect, PartialEq, Debug)]
 pub enum GameStatus {
     NotStarted,
     InProgress,
