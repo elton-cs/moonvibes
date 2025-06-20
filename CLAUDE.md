@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Dojo game starter project called "moonvibes" (internally "dojo_starter") - a blockchain-based game built on Starknet using the Dojo game engine framework. The project implements a simple movement system demonstrating Dojo's Entity Component System (ECS) architecture.
+This is Moon Bag - a push-your-luck bag-building game built on Starknet using the Dojo game engine framework. The project implements a cosmic-themed orb drawing mechanic where players draw orbs from their bag to score points while avoiding bombs. The MVP focuses on consumable orbs only (points, health, multipliers) without complex interaction mechanics.
 
 ## Technology Stack
 
@@ -22,10 +22,10 @@ This is a Dojo game starter project called "moonvibes" (internally "dojo_starter
 # Start local Starknet node (keep this running in a terminal)
 katana --dev --dev.no-fee
 
-# Build contracts
+# Build contracts (use frequently during development to check for errors)
 sozo build
 
-# Deploy to local node
+# Deploy to local node (ONLY run after all contracts are correctly implemented)
 sozo migrate
 
 # Start game state indexer (replace <WORLD_ADDRESS> with output from migrate)
@@ -37,12 +37,17 @@ torii --world <WORLD_ADDRESS> --http.cors_origins "*"
 # Build and migrate in one command
 scarb run migrate
 
-# Spawn a player
-scarb run spawn
+# Start a new game
+scarb run start
 
-# Move the player (direction: 1=Left, 2=Right, 3=Up, 4=Down)
-scarb run move
+# Pull an orb from the bag
+scarb run pull
 ```
+
+### Important Development Notes
+- **ALWAYS** use `sozo build` frequently during development to check for compiler errors
+- **ONLY** run `sozo migrate` at the very end once all contracts are correctly implemented
+- The user will handle Katana and Torii instances
 
 ### Docker Alternative
 ```bash
@@ -61,20 +66,33 @@ scarb test
 ### Core Structure
 - `/contracts/` - Main project directory
   - `src/` - Game contract source code
-    - `models.cairo` - Data models (Position, Moves, Direction, Vec2)
-    - `systems/actions.cairo` - Game logic (spawn, move)
+    - `models.cairo` - Data models (GameState, PlayerStats, Bag, Orbs)
+    - `systems/actions.cairo` - Game logic (start_game, pull_orb)
+    - `helpers/` - Modular helper functions
+      - `orb_effects.cairo` - Orb effect processing
+      - `bag_management.cairo` - Bag manipulation
+      - `game_progression.cairo` - Level and milestone logic
     - `lib.cairo` - Library entry point
   - `tests/` - Test files
 
 ### Game Components
 - **Models**: Define game state structure
-  - `Position`: Player coordinates using Vec2
-  - `Moves`: Tracks remaining moves and capabilities
-  - `Direction`: Movement directions enum
+  - `GameState`: Active status, current level, bombs pulled counter
+  - `PlayerStats`: Health, points, multiplier, currencies
+  - `Bag`: Dynamic array of orb IDs
+  - `LevelProgress`: Tracks pulled orbs for current level
 
 - **Systems**: Define game logic
-  - `spawn()`: Initialize player at (10, 10) with 100 moves
-  - `move(direction)`: Move player in cardinal directions
+  - `start_game()`: Initialize new game with starting bag and stats
+  - `pull_orb()`: Draw orb from bag and process all game mechanics
+
+### Orb Types (MVP - Consumables Only)
+- **Points**: FivePoints, SevenPoints, EightPoints, NinePoints
+- **Bombs**: SingleBomb (-1), DoubleBomb (-2), TripleBomb (-3)
+- **Health**: Health (+1), BigHealth (+3)
+- **Multipliers**: DoubleMultiplier (2x), Multiplier1_5x (1.5x), HalfMultiplier (0.5x)
+- **Special**: RemainingOrbs, BombCounter
+- **Currency**: MoonRock (+2), BigMoonRock (+10), CheddahBomb (-1 health, +10 cheddah)
 
 ### Configuration Files
 - `Scarb.toml` - Build configuration and script shortcuts

@@ -1,94 +1,141 @@
 use starknet::{ContractAddress};
 
-#[derive(Copy, Drop, Serde, Debug)]
-#[dojo::model]
-pub struct Moves {
-    #[key]
-    pub player: ContractAddress,
-    pub remaining: u8,
-    pub last_direction: Option<Direction>,
-    pub can_move: bool,
+// ================================
+// Orb Type Enum - All consumable orbs
+// ================================
+#[derive(Copy, Drop, Serde, Debug, PartialEq, Introspect)]
+pub enum OrbType {
+    // Points Orbs
+    FivePoints,
+    SevenPoints,
+    EightPoints,
+    NinePoints,
+    // Bomb Orbs
+    SingleBomb,
+    DoubleBomb,
+    TripleBomb,
+    // Health Orbs
+    Health,
+    BigHealth,
+    // Multiplier Orbs
+    DoubleMultiplier,
+    Multiplier1_5x,
+    HalfMultiplier,
+    // Special Orbs
+    RemainingOrbs,
+    BombCounter,
+    // Currency Orbs
+    MoonRock,
+    BigMoonRock,
+    CheddahBomb,
 }
 
+// ================================
+// Game State Model
+// ================================
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model]
+pub struct GameState {
+    #[key]
+    pub player: ContractAddress,
+    pub is_active: bool,
+    pub current_level: u8,
+    pub bombs_pulled: u8,
+}
+
+// ================================
+// Player Stats Model
+// ================================
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model]
+pub struct PlayerStats {
+    #[key]
+    pub player: ContractAddress,
+    pub health: u8,
+    pub points: u32,
+    pub multiplier: u32, // Fixed point: 100 = 1.0x
+    pub moon_rocks: u32,
+    pub cheddah: u32,
+}
+
+// ================================
+// Bag Model - Stores orb IDs
+// ================================
 #[derive(Drop, Serde, Debug)]
 #[dojo::model]
-pub struct DirectionsAvailable {
+pub struct Bag {
     #[key]
     pub player: ContractAddress,
-    pub directions: Array<Direction>,
+    pub orb_ids: Array<OrbType>,
 }
 
-#[derive(Copy, Drop, Serde, Debug)]
+// ================================
+// Level Progress Model
+// ================================
+#[derive(Drop, Serde, Debug)]
 #[dojo::model]
-pub struct Position {
+pub struct LevelProgress {
     #[key]
     pub player: ContractAddress,
-    pub vec: Vec2,
+    pub orbs_pulled: Array<OrbType>,
 }
 
-
-#[derive(Serde, Copy, Drop, Introspect, PartialEq, Debug)]
-pub enum Direction {
-    Left,
-    Right,
-    Up,
-    Down,
-}
-
-
-#[derive(Copy, Drop, Serde, IntrospectPacked, Debug)]
-pub struct Vec2 {
-    pub x: u32,
-    pub y: u32,
-}
-
-
-impl DirectionIntoFelt252 of Into<Direction, felt252> {
-    fn into(self: Direction) -> felt252 {
+// ================================
+// Helper implementations
+// ================================
+impl OrbTypeIntoFelt252 of Into<OrbType, felt252> {
+    fn into(self: OrbType) -> felt252 {
         match self {
-            Direction::Left => 1,
-            Direction::Right => 2,
-            Direction::Up => 3,
-            Direction::Down => 4,
+            OrbType::FivePoints => 1,
+            OrbType::SevenPoints => 2,
+            OrbType::EightPoints => 3,
+            OrbType::NinePoints => 4,
+            OrbType::SingleBomb => 5,
+            OrbType::DoubleBomb => 6,
+            OrbType::TripleBomb => 7,
+            OrbType::Health => 8,
+            OrbType::BigHealth => 9,
+            OrbType::DoubleMultiplier => 10,
+            OrbType::Multiplier1_5x => 11,
+            OrbType::HalfMultiplier => 12,
+            OrbType::RemainingOrbs => 13,
+            OrbType::BombCounter => 14,
+            OrbType::MoonRock => 15,
+            OrbType::BigMoonRock => 16,
+            OrbType::CheddahBomb => 17,
         }
     }
 }
 
-impl OptionDirectionIntoFelt252 of Into<Option<Direction>, felt252> {
-    fn into(self: Option<Direction>) -> felt252 {
-        match self {
-            Option::None => 0,
-            Option::Some(d) => d.into(),
-        }
+// ================================
+// Level Configuration
+// ================================
+pub fn get_level_config(level: u8) -> (u32, u32) {
+    // Returns (milestone_points, moon_rock_cost)
+    if level == 1 {
+        (12, 5)
+    } else if level == 2 {
+        (18, 6)
+    } else if level == 3 {
+        (28, 8)
+    } else if level == 4 {
+        (44, 10)
+    } else if level == 5 {
+        (66, 12)
+    } else if level == 6 {
+        (94, 16)
+    } else if level == 7 {
+        (130, 20)
+    } else {
+        (999999, 999999) // Impossible level
     }
 }
 
-#[generate_trait]
-impl Vec2Impl of Vec2Trait {
-    fn is_zero(self: Vec2) -> bool {
-        if self.x - self.y == 0 {
-            return true;
-        }
-        false
-    }
-
-    fn is_equal(self: Vec2, b: Vec2) -> bool {
-        self.x == b.x && self.y == b.y
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{Vec2, Vec2Trait};
-
-    #[test]
-    fn test_vec_is_zero() {
-        assert(Vec2Trait::is_zero(Vec2 { x: 0, y: 0 }), 'not zero');
-    }
-
-    #[test]
-    fn test_vec_is_equal() {
-        let position = Vec2 { x: 420, y: 0 };
-        assert(position.is_equal(Vec2 { x: 420, y: 0 }), 'not equal');
-    }
-}
+// ================================
+// Constants
+// ================================
+pub const STARTING_HEALTH: u8 = 5;
+pub const STARTING_MOON_ROCKS: u32 = 304;
+pub const STARTING_CHEDDAH: u32 = 0;
+pub const STARTING_POINTS: u32 = 0;
+pub const BASE_MULTIPLIER: u32 = 100; // 1.0x

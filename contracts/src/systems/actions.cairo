@@ -1,96 +1,225 @@
-use dojo_starter::models::{Direction, Position};
-
-// define the interface
+// Define the interface
 #[starknet::interface]
 pub trait IActions<T> {
-    fn spawn(ref self: T);
-    fn move(ref self: T, direction: Direction);
+    fn start_game(ref self: T);
+    fn pull_orb(ref self: T);
 }
 
-// dojo decorator
+// Dojo contract
 #[dojo::contract]
 pub mod actions {
-    use super::{IActions, Direction, Position, next_position};
-    use starknet::{ContractAddress, get_caller_address};
-    use dojo_starter::models::{Vec2, Moves};
+    use super::{IActions};
+    use starknet::{ContractAddress, get_caller_address, get_block_info};
+    use dojo_starter::models::{
+        GameState, PlayerStats, Bag, LevelProgress,
+        get_level_config, STARTING_HEALTH, STARTING_MOON_ROCKS, 
+        STARTING_CHEDDAH, STARTING_POINTS, BASE_MULTIPLIER
+    };
+    use dojo_starter::helpers::orb_effects::{apply_orb_effect};
+    use dojo_starter::helpers::bag_management::{initialize_starting_bag, draw_random_orb};
+    use dojo_starter::helpers::game_progression::{
+        check_level_complete, check_game_over, calculate_cheddah_reward
+    };
 
     use dojo::model::{ModelStorage};
     use dojo::event::EventStorage;
 
     #[derive(Copy, Drop, Serde)]
     #[dojo::event]
-    pub struct Moved {
+    pub struct GameStarted {
         #[key]
         pub player: ContractAddress,
-        pub direction: Direction,
+        pub level: u8,
+    }
+
+    #[derive(Copy, Drop, Serde)]
+    #[dojo::event]
+    pub struct OrbPulled {
+        #[key]
+        pub player: ContractAddress,
+        pub orb_type: felt252, // Store as felt252 for event
+        pub remaining_orbs: u32,
+    }
+
+    #[derive(Copy, Drop, Serde)]
+    #[dojo::event]
+    pub struct LevelComplete {
+        #[key]
+        pub player: ContractAddress,
+        pub level: u8,
+        pub points: u32,
+        pub cheddah_earned: u32,
+    }
+
+    #[derive(Copy, Drop, Serde)]
+    #[dojo::event]
+    pub struct GameOver {
+        #[key]
+        pub player: ContractAddress,
+        pub final_level: u8,
+        pub final_points: u32,
+        pub moon_rocks_earned: u32,
     }
 
     #[abi(embed_v0)]
     impl ActionsImpl of IActions<ContractState> {
-        fn spawn(ref self: ContractState) {
-            // Get the default world.
+        fn start_game(ref self: ContractState) {
             let mut world = self.world_default();
-
-            // Get the address of the current caller, possibly the player's address.
             let player = get_caller_address();
-            // Retrieve the player's current position from the world.
-            let position: Position = world.read_model(player);
-
-            // Update the world state with the new data.
-
-            // 1. Move the player's position 10 units in both the x and y direction.
-            let new_position = Position {
-                player, vec: Vec2 { x: position.vec.x + 10, y: position.vec.y + 10 },
-            };
-
-            // Write the new position to the world.
-            world.write_model(@new_position);
-
-            // 2. Set the player's remaining moves to 100.
-            let moves = Moves {
-                player, remaining: 100, last_direction: Option::None, can_move: true,
-            };
-
-            // Write the new moves to the world.
-            world.write_model(@moves);
-        }
-
-        // Implementation of the move function for the ContractState struct.
-        fn move(ref self: ContractState, direction: Direction) {
-            // Get the address of the current caller, possibly the player's address.
-
-            let mut world = self.world_default();
-
-            let player = get_caller_address();
-
-            // Retrieve the player's current position and moves data from the world.
-            let position: Position = world.read_model(player);
-            let mut moves: Moves = world.read_model(player);
-            // if player hasn't spawn, read returns model default values. This leads to sub overflow
-            // afterwards.
-            // Plus it's generally considered as a good pratice to fast-return on matching
-            // conditions.
-            if !moves.can_move {
-                return;
+            
+            // Read current player stats
+            let mut stats: PlayerStats = world.read_model(player);
+            
+            // Get level 1 config
+            let (_, moon_rock_cost) = get_level_config(1);
+            
+            // Check if player has enough moon rocks
+            if stats.moon_rocks == 0 {
+                // First time player, give starting resources
+                stats.moon_rocks = STARTING_MOON_ROCKS;
             }
-
-            // Deduct one from the player's remaining moves.
-            moves.remaining -= 1;
-
-            // Update the last direction the player moved in.
-            moves.last_direction = Option::Some(direction);
-
-            // Calculate the player's next position based on the provided direction.
-            let next = next_position(position, moves.last_direction);
-
-            // Write the new position to the world.
-            world.write_model(@next);
-
-            // Write the new moves to the world.
-            world.write_model(@moves);
-
-            // Emit an event to the world to notify about the player's move.
-            world.emit_event(@Moved { player, direction });
+            
+            assert(stats.moon_rocks >= moon_rock_cost, 'Not enough moon rocks');
+            
+            // Initialize game state
+            let game_state = GameState {
+                player,
+                is_active: true,
+                current_level: 1,
+                bombs_pulled: 0,
+            };
+            
+            // Initialize player stats for new game
+            stats.moon_rocks -= moon_rock_cost;
+            stats.health = STARTING_HEALTH;
+            stats.points = STARTING_POINTS;
+            stats.multiplier = BASE_MULTIPLIER;
+            stats.cheddah = STARTING_CHEDDAH;
+            
+            // Initialize bag with starting orbs
+            let bag = Bag {
+                player,
+                orb_ids: initialize_starting_bag(),
+            };
+            
+            // Clear level progress
+            let level_progress = LevelProgress {
+                player,
+                orbs_pulled: array![],
+            };
+            
+            // Write all models
+            world.write_model(@game_state);
+            world.write_model(@stats);
+            world.write_model(@bag);
+            world.write_model(@level_progress);
+            
+            // Emit event
+            world.emit_event(@GameStarted { player, level: 1 });
+        }
+        
+        fn pull_orb(ref self: ContractState) {
+            let mut world = self.world_default();
+            let player = get_caller_address();
+            
+            // Read current state
+            let mut game_state: GameState = world.read_model(player);
+            let mut stats: PlayerStats = world.read_model(player);
+            let mut bag: Bag = world.read_model(player);
+            let mut level_progress: LevelProgress = world.read_model(player);
+            
+            // Verify game is active
+            assert(game_state.is_active, 'Game not active');
+            assert(bag.orb_ids.len() > 0, 'Bag is empty');
+            
+            // Get random seed from block info
+            let block_info = get_block_info().unbox();
+            let random_seed = block_info.block_timestamp.into();
+            
+            // Draw random orb
+            let (orb_type, updated_bag) = draw_random_orb(bag, random_seed);
+            bag = updated_bag;
+            
+            // Apply orb effects
+            let (updated_stats, updated_game_state) = apply_orb_effect(
+                orb_type, stats, game_state, @bag
+            );
+            stats = updated_stats;
+            game_state = updated_game_state;
+            
+            // Add to pulled orbs history
+            level_progress.orbs_pulled.append(orb_type);
+            
+            // Write updated models
+            world.write_model(@stats);
+            world.write_model(@game_state);
+            world.write_model(@bag);
+            world.write_model(@level_progress);
+            
+            // Emit orb pulled event
+            world.emit_event(@OrbPulled { 
+                player, 
+                orb_type: orb_type.into(),
+                remaining_orbs: bag.orb_ids.len(),
+            });
+            
+            // Check game end conditions
+            if check_game_over(stats.health, bag.orb_ids.len()) {
+                // Game over
+                game_state.is_active = false;
+                
+                // Convert points to moon rocks (1:1)
+                stats.moon_rocks += stats.points;
+                
+                world.write_model(@game_state);
+                world.write_model(@stats);
+                
+                world.emit_event(@GameOver {
+                    player,
+                    final_level: game_state.current_level,
+                    final_points: stats.points,
+                    moon_rocks_earned: stats.points,
+                });
+            } else if check_level_complete(stats.points, game_state.current_level) {
+                // Level complete
+                let cheddah_reward = calculate_cheddah_reward(game_state.current_level);
+                stats.cheddah += cheddah_reward;
+                
+                world.emit_event(@LevelComplete {
+                    player,
+                    level: game_state.current_level,
+                    points: stats.points,
+                    cheddah_earned: cheddah_reward,
+                });
+                
+                // Advance to next level
+                game_state.current_level += 1;
+                
+                // Reset multiplier for new level
+                stats.multiplier = BASE_MULTIPLIER;
+                
+                // Clear pulled orbs for new level
+                level_progress.orbs_pulled = array![];
+                
+                // Check if there's a next level
+                let (next_milestone, _) = get_level_config(game_state.current_level);
+                if next_milestone == 999999 {
+                    // No more levels, end game
+                    game_state.is_active = false;
+                    stats.moon_rocks += stats.points;
+                    
+                    world.emit_event(@GameOver {
+                        player,
+                        final_level: game_state.current_level - 1,
+                        final_points: stats.points,
+                        moon_rocks_earned: stats.points,
+                    });
+                }
+                
+                world.write_model(@game_state);
+                world.write_model(@stats);
+                world.write_model(@level_progress);
+            }
         }
     }
 
@@ -102,18 +231,4 @@ pub mod actions {
             self.world(@"dojo_starter")
         }
     }
-}
-
-// Define function like this:
-fn next_position(mut position: Position, direction: Option<Direction>) -> Position {
-    match direction {
-        Option::None => { return position; },
-        Option::Some(d) => match d {
-            Direction::Left => { position.vec.x -= 1; },
-            Direction::Right => { position.vec.x += 1; },
-            Direction::Up => { position.vec.y -= 1; },
-            Direction::Down => { position.vec.y += 1; },
-        },
-    };
-    position
 }
