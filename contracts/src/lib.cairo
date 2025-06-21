@@ -23,6 +23,13 @@ pub mod helpers {
     pub mod bag_management;
 }
 
+#[cfg(test)]
+pub mod tests {
+    pub mod models {
+        pub mod test_orb_simple;
+    }
+}
+
 // Re-export main components that exist
 pub use models::orb::{OrbType, Orb};
 pub use models::game_state::{GameState, GameStatus};
