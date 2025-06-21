@@ -8,9 +8,9 @@ edition = "2024_07"
 sierra-replace-ids = true
 
 [scripts]
-migrate = "sozo build && sozo migrate"                          # scarb run migrate
-start = "sozo execute dojo_starter-actions start_game --wait"   # scarb run start
-pull = "sozo execute dojo_starter-actions pull_orb --wait"      # scarb run pull
+migrate = "sozo build && sozo migrate"                                # scarb run migrate
+start = "sozo execute dojo_starter-game_management start_game --wait" # scarb run start
+pull = "sozo execute dojo_starter-orb_drawing pull_orb --wait"        # scarb run pull
 
 [dependencies]
 dojo = { git = "https://github.com/dojoengine/dojo", tag = "v1.5.1" }

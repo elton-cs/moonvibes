@@ -28,6 +28,9 @@ pub mod tests {
     pub mod models {
         pub mod test_orb_simple;
     }
+    pub mod systems {
+        pub mod test_game_management;
+    }
 }
 
 // Re-export main components that exist
